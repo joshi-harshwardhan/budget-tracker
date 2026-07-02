@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0a0a0a">
+<title>Harshwardhan's Budget</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: Arial, sans-serif; background: #0a0a0a; color: #e5e5e5;
+    min-height: 100vh; padding: 24px 16px 40px;
+  }
+  .wrap { max-width: 680px; margin: 0 auto; }
+  .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
+  .title { font-size: 17px; font-weight: 700; color: #f5f5f5; margin: 0; }
+  .updated { font-size: 11px; color: #6a6a6a; margin: 4px 0 0; }
+  .toggle { display: inline-flex; background: #141414; border-radius: 8px; padding: 3px; border: 0.5px solid #2a2a2a; }
+  .toggle div { padding: 7px 16px; font-size: 13px; border-radius: 6px; cursor: pointer; color: #9a9a9a; }
+  .toggle div.active { background: #1f1f1f; color: #f5f5f5; font-weight: 700; }
+
+  .metrics { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-bottom: 20px; }
+  @media (max-width: 560px) { .metrics { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+  .metric { background: #141414; border: 0.5px solid #2a2a2a; border-radius: 12px; padding: 14px; }
+  .metric.savings { background: #0f1f16; border-color: #1e4430; }
+  .metric p:first-child { font-size: 12px; color: #9a9a9a; margin: 0 0 4px; }
+  .metric.savings p:first-child { color: #4ade80; }
+  .metric p:last-child { font-size: 18px; font-weight: 700; margin: 0; color: #f5f5f5; }
+  .metric.savings p:last-child { color: #4ade80; }
+
+  .cat-list { display: flex; flex-direction: column; gap: 10px; }
+  .cat-card { background: #141414; border: 0.5px solid #2a2a2a; border-radius: 12px; padding: 14px 16px; }
+  .cat-row { display: flex; justify-content: space-between; margin-bottom: 8px; }
+  .cat-name { font-size: 14px; font-weight: 700; }
+  .cat-amounts { font-size: 13px; color: #9a9a9a; }
+  .bar-track { height: 8px; background: #1f1f1f; border-radius: 4px; overflow: hidden; }
+  .bar-fill { height: 100%; }
+  .status-line { display: flex; align-items: center; gap: 5px; margin-top: 8px; font-size: 12px; font-weight: 700; }
+  .no-spend { font-size: 13px; color: #6a6a6a; }
+
+  .loading { text-align: center; color: #6a6a6a; padding: 40px 0; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <p class="title">Harshwardhan's Budget</p>
+      <p class="updated" id="updated">Loading...</p>
+    </div>
+    <div class="toggle">
+      <div id="toggle-month" class="active" onclick="setView('month')">This month</div>
+      <div id="toggle-ytd" onclick="setView('ytd')">Year to date</div>
+    </div>
+  </div>
+
+  <div id="content">
+    <div class="loading">Loading your budget...</div>
+  </div>
+</div>
+
+<script>
+// Paste your deployed Apps Script Web App URL here (ends in /exec).
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyBhN_Xkd69wnO65CmiXBi1dRf_O-cBbtx5vUxdLsVQxwzClTv5NSBCtyCy4I2hBM489A/exec";
+
+const CATEGORY_COLORS = {
+  "Fixed Commitments": "#60a5fa",
+  "Food": "#2dd4bf",
+  "Subscriptions & Health": "#a78bfa",
+  "Personal Care": "#f472b6",
+  "Transport": "#22d3ee",
+  "Lifestyle & Going Out": "#818cf8",
+  "Miscellaneous": "#9ca3af",
+  "Capital Items": "#c084fc"
+};
+const DEFAULT_COLORS = ["#60a5fa","#2dd4bf","#a78bfa","#f472b6","#22d3ee","#818cf8","#9ca3af","#c084fc"];
+
+let currentView = "month";
+
+function fmt(n) {
+  return "₹" + Math.round(n).toLocaleString("en-IN");
+}
+
+function colorFor(category, index) {
+  return CATEGORY_COLORS[category] || DEFAULT_COLORS[index % DEFAULT_COLORS.length];
+}
+
+function setView(view) {
+  currentView = view;
+  document.getElementById("toggle-month").classList.toggle("active", view === "month");
+  document.getElementById("toggle-ytd").classList.toggle("active", view === "ytd");
+  load();
+}
+
+function load() {
+  document.getElementById("content").innerHTML = '<div class="loading">Loading your budget...</div>';
+  fetch(WEB_APP_URL + "?view=" + currentView)
+    .then(r => r.json())
+    .then(render)
+    .catch(() => {
+      document.getElementById("content").innerHTML = '<div class="loading">Could not load data. Check the Web App URL is set correctly.</div>';
+    });
+}
+
+function render(data) {
+  document.getElementById("updated").textContent = "Updated " + new Date(data.updatedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+
+  const metricLabel = currentView === "ytd" ? "Budgeted (YTD)" : "Budgeted";
+  const savingsLabel = currentView === "ytd" ? "Savings so far" : "Projected savings";
+  const savingsVal = currentView === "ytd" ? data.actualSavingsSoFar : data.projectedSavings;
+
+  let html = '<div class="metrics">';
+  html += metricCard("Income", fmt(data.income));
+  html += metricCard("Spent so far", fmt(data.totalSpent));
+  html += metricCard(metricLabel, fmt(data.totalBudget));
+  html += metricCard(savingsLabel, fmt(savingsVal), true);
+  html += '</div>';
+
+  html += '<div class="cat-list">';
+  let i = 0;
+  Object.keys(data.categoryTotals).forEach(cat => {
+    const c = data.categoryTotals[cat];
+    html += categoryCard(cat, c.budget, c.spent, colorFor(cat, i));
+    i++;
+  });
+  html += '</div>';
+
+  document.getElementById("content").innerHTML = html;
+}
+
+function metricCard(label, value, isSavings) {
+  return '<div class="metric' + (isSavings ? ' savings' : '') + '"><p>' + label + '</p><p>' + value + '</p></div>';
+}
+
+function categoryCard(name, budget, spent, nameColor) {
+  if (budget === 0 && spent === 0) {
+    return '<div class="cat-card"><div class="cat-row"><span class="cat-name" style="color:' + nameColor + '">' + name + '</span><span class="no-spend">No spending logged</span></div><div class="bar-track"></div></div>';
+  }
+  const pct = budget > 0 ? (spent / budget) * 100 : 100;
+  let barColor = "#4ade80", status = "";
+  if (pct > 100) { barColor = "#ef4444"; status = '<i class="status-icon">!</i> Over by ' + fmt(spent - budget); }
+  else if (pct >= 90) { barColor = "#f2a623"; status = "Right at budget"; }
+  const widthPct = Math.min(pct, 100);
+  let html = '<div class="cat-card">';
+  html += '<div class="cat-row"><span class="cat-name" style="color:' + nameColor + '">' + name + '</span><span class="cat-amounts">' + fmt(spent) + ' / ' + fmt(budget) + '</span></div>';
+  html += '<div class="bar-track"><div class="bar-fill" style="width:' + widthPct + '%;background:' + barColor + ';"></div></div>';
+  if (status) {
+    const color = pct > 100 ? "#ef4444" : "#f2a623";
+    html += '<div class="status-line" style="color:' + color + ';">' + status + '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+load();
+setInterval(load, 60000);
+</script>
+</body>
+</html>

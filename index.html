@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0a0a0a">
+<title>Log Expense</title>
+<link rel="manifest" href="manifest.json">
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; font-family: Arial, sans-serif; background: #0a0a0a; color: #e5e5e5;
+    min-height: 100vh; padding: 16px; padding-bottom: 24px;
+  }
+  h1 { font-size: 15px; margin: 0 0 12px; font-weight: 700; color: #f5f5f5; }
+  .screen { display: none; min-height: calc(100vh - 32px); flex-direction: column; }
+  .screen.active { display: flex; }
+
+  .month-bar {
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;
+    background: #141414; border: 0.5px solid #2a2a2a; border-radius: 10px; padding: 8px 10px;
+  }
+  .month-bar span:first-child { font-size: 13px; font-weight: 700; color: #f5f5f5; }
+  .month-bar span:last-child { font-size: 11px; color: #3b82f6; font-weight: 700; }
+
+  .cat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .cat-btn {
+    background: #141414; border: 0.5px solid #2a2a2a; border-radius: 10px;
+    padding: 16px 10px; font-size: 13px; font-weight: 700; color: #e5e5e5;
+    text-align: center; cursor: pointer;
+  }
+  .cat-btn:active { background: #1f1f1f; }
+  .add-btn {
+    grid-column: 1 / -1; background: #0f1f2e; border: 0.5px dashed #3b82f6; border-radius: 10px;
+    padding: 12px 8px; font-size: 13px; text-align: center; color: #60a5fa; font-weight: 700; cursor: pointer;
+  }
+  .add-btn.item { grid-column: auto; }
+
+  .item-list { display: flex; flex-direction: column; gap: 8px; }
+  .item-btn {
+    background: #141414; border: 0.5px solid #2a2a2a; border-radius: 10px;
+    padding: 14px; font-size: 14px; text-align: left; cursor: pointer; color: #e5e5e5;
+  }
+  .item-btn:active { background: #1f1f1f; }
+
+  .back { background: none; border: none; color: #3b82f6; font-size: 13px; font-weight: 700; padding: 0 0 12px; cursor: pointer; text-align: left; }
+
+  .amount-display {
+    font-size: 38px; font-weight: 700; text-align: center; margin: 16px 0;
+    color: #f5f5f5; min-height: 48px;
+  }
+  .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+  .key {
+    background: #141414; border: 0.5px solid #2a2a2a; border-radius: 10px;
+    padding: 16px; font-size: 20px; text-align: center; cursor: pointer; color: #e5e5e5;
+  }
+  .key:active { background: #1f1f1f; }
+  .text-input, .note-input {
+    width: 100%; padding: 12px; border-radius: 10px; border: 0.5px solid #2a2a2a;
+    font-size: 14px; margin-bottom: 14px; font-family: Arial; background: #141414; color: #f5f5f5;
+  }
+  .submit-btn {
+    width: 100%; padding: 15px; border: none; border-radius: 10px;
+    background: #4ade80; color: #0f1f16; font-size: 15px; font-weight: 700; cursor: pointer;
+  }
+  .submit-btn:disabled { background: #245c3a; color: #6a8c78; }
+  .skip-link { text-align: center; font-size: 12px; color: #6a6a6a; padding: 10px 0 0; cursor: pointer; }
+
+  .toast {
+    position: fixed; bottom: 20px; left: 16px; right: 16px; background: #141414; border: 0.5px solid #2a2a2a;
+    color: #f5f5f5; padding: 13px; border-radius: 10px; text-align: center; font-size: 13px;
+    display: none;
+  }
+
+  .setup { text-align: center; padding-top: 40px; }
+  .setup p { font-size: 12px; color: #9a9a9a; }
+  .setup input { text-align: left; }
+
+  .bottom-nav { margin-top: auto; padding-top: 14px; border-top: 0.5px solid #2a2a2a; display: flex; gap: 8px; }
+  .nav-link { flex: 1; background: #141414; border: 0.5px solid #2a2a2a; border-radius: 10px; padding: 10px 6px; text-align: center; font-size: 11px; color: #9a9a9a; cursor: pointer; }
+  .nav-link i { font-size: 15px; display: block; margin: 0 auto 4px; }
+
+  select.month-select {
+    width: 100%; padding: 12px; border-radius: 10px; border: 0.5px solid #2a2a2a;
+    background: #141414; color: #f5f5f5; font-size: 14px; margin-bottom: 14px;
+  }
+</style>
+</head>
+<body>
+
+<div id="setup-screen" class="screen">
+  <div class="setup">
+    <h1>One-time setup</h1>
+    <p>Paste these once, they are saved only on this phone.</p>
+    <input class="text-input" id="setup-url" type="text" placeholder="Web App URL (ends in /exec)">
+    <input class="text-input" id="setup-token" type="text" placeholder="Transaction token">
+    <input class="text-input" id="setup-sheet" type="text" placeholder="Sheet URL">
+    <input class="text-input" id="setup-dashboard" type="text" placeholder="Dashboard URL">
+    <button class="submit-btn" onclick="saveSetup()">Save</button>
+  </div>
+</div>
+
+<div id="category-screen" class="screen">
+  <div class="month-bar">
+    <span id="month-label">Jul 2026</span>
+    <span onclick="showScreen('month-screen')"><i class="ti ti-calendar" style="vertical-align:-2px;margin-right:3px;"></i>change month</span>
+  </div>
+  <h1>What did you spend on?</h1>
+  <div id="cat-grid" class="cat-grid"></div>
+  <div class="bottom-nav">
+    <div class="nav-link" onclick="openLink('sheet')"><i class="ti ti-table"></i>View spreadsheet</div>
+    <div class="nav-link" onclick="openLink('dashboard')"><i class="ti ti-chart-bar"></i>View dashboard</div>
+  </div>
+</div>
+
+<div id="month-screen" class="screen">
+  <button class="back" onclick="showScreen('category-screen')">&larr; Back</button>
+  <h1>Log against which month</h1>
+  <select class="month-select" id="month-select"></select>
+  <button class="submit-btn" onclick="confirmMonth()">Use this month</button>
+</div>
+
+<div id="item-screen" class="screen">
+  <button class="back" onclick="showScreen('category-screen')">&larr; Categories</button>
+  <h1 id="item-screen-title"></h1>
+  <div id="item-list" class="item-list"></div>
+</div>
+
+<div id="new-category-screen" class="screen">
+  <button class="back" onclick="showScreen('category-screen')">&larr; Categories</button>
+  <h1>New category name</h1>
+  <input class="text-input" id="new-category-name" type="text" placeholder="e.g. Home Improvement">
+  <button class="submit-btn" onclick="createCategory()">Continue</button>
+</div>
+
+<div id="new-item-name-screen" class="screen">
+  <button class="back" onclick="showScreen('item-screen')">&larr; Back</button>
+  <h1 id="new-item-cat-title"></h1>
+  <input class="text-input" id="new-item-name" type="text" placeholder="Item name, e.g. Netflix">
+  <button class="submit-btn" onclick="goToItemBudget()">Continue</button>
+</div>
+
+<div id="new-item-budget-screen" class="screen">
+  <button class="back" onclick="showScreen('new-item-name-screen')">&larr; Back</button>
+  <h1 id="new-item-budget-title"></h1>
+  <p style="font-size:12px;color:#9a9a9a;margin:-8px 0 4px;">Set a monthly target, optional</p>
+  <div class="amount-display" id="new-item-amount-display">₹0</div>
+  <div class="keypad" id="new-item-keypad"></div>
+  <button class="submit-btn" onclick="submitNewItem()">Save item</button>
+  <div class="skip-link" onclick="submitNewItem(true)">Skip, I'll set this later</div>
+</div>
+
+<div id="amount-screen" class="screen">
+  <button class="back" onclick="showScreen('item-screen')">&larr; Back</button>
+  <h1 id="amount-title"></h1>
+  <div class="amount-display" id="amount-display">₹0</div>
+  <div class="keypad" id="keypad"></div>
+  <input class="note-input" id="note-input" type="text" placeholder="Note (optional)">
+  <button class="submit-btn" id="submit-btn" onclick="submitTransaction()">Log expense</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const MONTHS = ["Apr-26","May-26","Jun-26","Jul-26","Aug-26","Sep-26","Oct-26","Nov-26","Dec-26","Jan-27","Feb-27","Mar-27"];
+const MONTH_LABELS = {"Apr-26":"Apr 2026","May-26":"May 2026","Jun-26":"Jun 2026","Jul-26":"Jul 2026","Aug-26":"Aug 2026","Sep-26":"Sep 2026","Oct-26":"Oct 2026","Nov-26":"Nov 2026","Dec-26":"Dec 2026","Jan-27":"Jan 2027","Feb-27":"Feb 2027","Mar-27":"Mar 2027"};
+
+let categories = {};
+let selectedCategory = null;
+let selectedItem = null;
+let amountStr = "";
+let selectedMonth = currentMonthTab();
+let pendingNewCategory = null;
+
+function currentMonthTab() {
+  const names = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const d = new Date();
+  return names[d.getMonth()] + "-" + String(d.getFullYear() % 100).padStart(2, "0");
+}
+
+function showScreen(id) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+}
+
+function getConfig() {
+  return {
+    url: localStorage.getItem("budgetAppUrl"),
+    token: localStorage.getItem("budgetAppToken"),
+    sheetUrl: localStorage.getItem("budgetSheetUrl"),
+    dashboardUrl: localStorage.getItem("budgetDashboardUrl")
+  };
+}
+
+function saveSetup() {
+  const url = document.getElementById("setup-url").value.trim();
+  const token = document.getElementById("setup-token").value.trim();
+  const sheet = document.getElementById("setup-sheet").value.trim();
+  const dashboard = document.getElementById("setup-dashboard").value.trim();
+  if (!url || !token) { alert("Web App URL and token are required."); return; }
+  localStorage.setItem("budgetAppUrl", url);
+  localStorage.setItem("budgetAppToken", token);
+  localStorage.setItem("budgetSheetUrl", sheet);
+  localStorage.setItem("budgetDashboardUrl", dashboard);
+  init();
+}
+
+function openLink(which) {
+  const config = getConfig();
+  const url = which === "sheet" ? config.sheetUrl : config.dashboardUrl;
+  if (url) window.open(url, "_blank");
+}
+
+function loadCategories() {
+  const config = getConfig();
+  fetch(config.url + "?action=categories")
+    .then(r => r.json())
+    .then(data => {
+      categories = {};
+      (data.items || []).forEach(item => {
+        if (!categories[item.category]) categories[item.category] = [];
+        categories[item.category].push(item);
+      });
+      buildCategoryGrid();
+    })
+    .catch(() => showToast("Could not load categories, check your connection."));
+}
+
+function buildCategoryGrid() {
+  const grid = document.getElementById("cat-grid");
+  grid.innerHTML = "";
+  Object.keys(categories).forEach(cat => {
+    const btn = document.createElement("div");
+    btn.className = "cat-btn";
+    btn.textContent = cat;
+    btn.onclick = () => openCategory(cat);
+    grid.appendChild(btn);
+  });
+  const addBtn = document.createElement("div");
+  addBtn.className = "add-btn";
+  addBtn.innerHTML = '<i class="ti ti-plus" style="vertical-align:-2px;margin-right:4px;"></i>Add new category';
+  addBtn.onclick = () => showScreen("new-category-screen");
+  grid.appendChild(addBtn);
+
+  document.getElementById("month-label").textContent = MONTH_LABELS[selectedMonth];
+}
+
+function openCategory(cat) {
+  selectedCategory = cat;
+  document.getElementById("item-screen-title").textContent = cat;
+  const list = document.getElementById("item-list");
+  list.innerHTML = "";
+  (categories[cat] || []).forEach(item => {
+    const btn = document.createElement("div");
+    btn.className = "item-btn";
+    btn.textContent = item.label;
+    btn.onclick = () => openAmount(item);
+    list.appendChild(btn);
+  });
+  const addBtn = document.createElement("div");
+  addBtn.className = "item-btn";
+  addBtn.style.color = "#60a5fa";
+  addBtn.style.borderStyle = "dashed";
+  addBtn.style.borderColor = "#3b82f6";
+  addBtn.innerHTML = '<i class="ti ti-plus" style="vertical-align:-2px;margin-right:4px;"></i>Add new item';
+  addBtn.onclick = () => {
+    document.getElementById("new-item-cat-title").textContent = cat;
+    document.getElementById("new-item-name").value = "";
+    showScreen("new-item-name-screen");
+  };
+  list.appendChild(addBtn);
+  showScreen("item-screen");
+}
+
+function openAmount(item) {
+  selectedItem = item;
+  amountStr = "";
+  document.getElementById("amount-title").textContent = item.label;
+  document.getElementById("amount-display").textContent = "₹0";
+  document.getElementById("note-input").value = "";
+  buildKeypad("keypad", "amount-display");
+  showScreen("amount-screen");
+}
+
+function buildKeypad(padId, displayId) {
+  const keys = ["1","2","3","4","5","6","7","8","9",".","0","⌫"];
+  const pad = document.getElementById(padId);
+  pad.innerHTML = "";
+  keys.forEach(k => {
+    const btn = document.createElement("div");
+    btn.className = "key";
+    btn.textContent = k;
+    btn.onclick = () => pressKey(k, displayId);
+    pad.appendChild(btn);
+  });
+}
+
+function pressKey(k, displayId) {
+  if (k === "⌫") amountStr = amountStr.slice(0, -1);
+  else if (k === "." && amountStr.includes(".")) return;
+  else amountStr += k;
+  const val = parseFloat(amountStr) || 0;
+  document.getElementById(displayId).textContent = "₹" + val.toLocaleString("en-IN");
+}
+
+function submitTransaction() {
+  const amount = parseFloat(amountStr);
+  if (!amount || amount <= 0) { alert("Enter an amount first."); return; }
+  const config = getConfig();
+  const note = document.getElementById("note-input").value.trim();
+  const btn = document.getElementById("submit-btn");
+  btn.disabled = true; btn.textContent = "Logging...";
+
+  fetch(config.url, {
+    method: "POST",
+    body: JSON.stringify({
+      token: config.token, action: "addTransaction",
+      lineItemKey: selectedItem.key, amount: amount, note: note, month: selectedMonth
+    })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.status === "ok") {
+      showToast("Logged ₹" + amount.toLocaleString("en-IN") + " to " + selectedItem.label);
+      showScreen("category-screen");
+    } else alert("Error: " + data.message);
+  })
+  .catch(err => alert("Network error: " + err.message))
+  .finally(() => { btn.disabled = false; btn.textContent = "Log expense"; });
+}
+
+function createCategory() {
+  const name = document.getElementById("new-category-name").value.trim();
+  if (!name) { alert("Enter a category name."); return; }
+  pendingNewCategory = name;
+  if (!categories[name]) categories[name] = [];
+  document.getElementById("new-item-cat-title").textContent = name;
+  document.getElementById("new-item-name").value = "";
+  showScreen("new-item-name-screen");
+}
+
+let newItemBudgetStr = "";
+function goToItemBudget() {
+  const name = document.getElementById("new-item-name").value.trim();
+  if (!name) { alert("Enter an item name."); return; }
+  newItemBudgetStr = "";
+  document.getElementById("new-item-budget-title").textContent = name;
+  document.getElementById("new-item-amount-display").textContent = "₹0";
+  buildKeypad("new-item-keypad", "new-item-amount-display");
+  showScreen("new-item-budget-screen");
+}
+
+function submitNewItem(skip) {
+  const config = getConfig();
+  const label = document.getElementById("new-item-name").value.trim();
+  const category = pendingNewCategory || selectedCategory;
+  const budget = skip ? 0 : (parseFloat(newItemBudgetStr) || 0);
+
+  fetch(config.url, {
+    method: "POST",
+    body: JSON.stringify({ token: config.token, action: "addItem", category: category, label: label, budget: budget })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.status === "ok") {
+      showToast(label + " added to " + category);
+      pendingNewCategory = null;
+      loadCategories();
+      showScreen("category-screen");
+    } else alert("Error: " + data.message);
+  })
+  .catch(err => alert("Network error: " + err.message));
+}
+
+// Override pressKey target for the new-item budget keypad specifically
+document.addEventListener("click", function (e) {
+  if (e.target.closest("#new-item-keypad")) {
+    const k = e.target.textContent;
+    if (k === "⌫") newItemBudgetStr = newItemBudgetStr.slice(0, -1);
+    else if (k === "." && newItemBudgetStr.includes(".")) return;
+    else if (/[0-9.]/.test(k)) newItemBudgetStr += k;
+    const val = parseFloat(newItemBudgetStr) || 0;
+    document.getElementById("new-item-amount-display").textContent = "₹" + val.toLocaleString("en-IN");
+  }
+}, true);
+
+function buildMonthSelect() {
+  const sel = document.getElementById("month-select");
+  sel.innerHTML = "";
+  MONTHS.forEach(m => {
+    const opt = document.createElement("option");
+    opt.value = m; opt.textContent = MONTH_LABELS[m];
+    if (m === selectedMonth) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+function confirmMonth() {
+  selectedMonth = document.getElementById("month-select").value;
+  document.getElementById("month-label").textContent = MONTH_LABELS[selectedMonth];
+  showScreen("category-screen");
+}
+
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.style.display = "block";
+  setTimeout(() => { t.style.display = "none"; }, 2500);
+}
+
+function init() {
+  const config = getConfig();
+  if (!config.url || !config.token) { showScreen("setup-screen"); return; }
+  buildMonthSelect();
+  loadCategories();
+  showScreen("category-screen");
+}
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+}
+
+init();
+</script>
+</body>
+</html>
