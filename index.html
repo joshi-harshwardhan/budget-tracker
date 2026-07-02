@@ -211,17 +211,40 @@ function openLink(which) {
   if (url) window.open(url, "_blank");
 }
 
-function jsonp(url) {
+function jsonp(url, timeoutMs) {
   return new Promise((resolve, reject) => {
     const cbName = "jsonp_cb_" + Math.random().toString(36).slice(2);
+    const fullUrl = url + (url.indexOf("?") > -1 ? "&" : "?") + "callback=" + cbName;
     const script = document.createElement("script");
-    window[cbName] = function (data) {
-      resolve(data);
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      const err = new Error("timeout");
+      err.fullUrl = fullUrl;
+      reject(err);
+    }, timeoutMs || 8000);
+    function cleanup() {
+      clearTimeout(timer);
       delete window[cbName];
       script.remove();
+    }
+    window[cbName] = function (data) {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(data);
     };
-    script.onerror = () => { reject(new Error("load failed")); delete window[cbName]; script.remove(); };
-    script.src = url + (url.indexOf("?") > -1 ? "&" : "?") + "callback=" + cbName;
+    script.onerror = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      const err = new Error("script load error");
+      err.fullUrl = fullUrl;
+      reject(err);
+    };
+    script.src = fullUrl;
     document.body.appendChild(script);
   });
 }
@@ -238,11 +261,13 @@ function loadCategories() {
       });
       buildCategoryGrid();
     })
-    .catch(() => {
+    .catch(err => {
       showToast("Could not load categories");
-      console.error("Failed loading:", url);
+      const attempted = (err && err.fullUrl) ? err.fullUrl : url;
       document.getElementById("cat-grid").innerHTML =
-        '<div style="grid-column:1/-1;font-size:11px;color:#ef4444;word-break:break-all;padding:10px;">Tried: ' + url + '</div>';
+        '<div style="grid-column:1/-1;font-size:11px;color:#ef4444;word-break:break-all;padding:10px;">' +
+        (err && err.message === "timeout" ? "Timed out after 8s. " : "Failed to load script. ") +
+        'Tap to test directly: <a href="' + attempted + '" target="_blank" style="color:#60a5fa;">' + attempted + '</a></div>';
     });
 }
 
