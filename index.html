@@ -198,8 +198,8 @@ function saveSetup() {
   const sheet = document.getElementById("setup-sheet").value.trim();
   const dashboard = document.getElementById("setup-dashboard").value.trim();
   if (!url || !token) { alert("Web App URL and token are required."); return; }
-  localStorage.setItem("budgetAppUrl", url);
-  localStorage.setItem("budgetAppToken", token);
+  localStorage.setItem("budgetAppUrl", url.replace(/\s+/g, ""));
+  localStorage.setItem("budgetAppToken", token.replace(/\s+/g, ""));
   localStorage.setItem("budgetSheetUrl", sheet);
   localStorage.setItem("budgetDashboardUrl", dashboard);
   init();
@@ -228,7 +228,8 @@ function jsonp(url) {
 
 function loadCategories() {
   const config = getConfig();
-  jsonp(config.url + "?action=categories")
+  const url = config.url + "?action=categories";
+  jsonp(url)
     .then(data => {
       categories = {};
       (data.items || []).forEach(item => {
@@ -237,7 +238,12 @@ function loadCategories() {
       });
       buildCategoryGrid();
     })
-    .catch(() => showToast("Could not load categories, check your connection."));
+    .catch(() => {
+      showToast("Could not load categories");
+      console.error("Failed loading:", url);
+      document.getElementById("cat-grid").innerHTML =
+        '<div style="grid-column:1/-1;font-size:11px;color:#ef4444;word-break:break-all;padding:10px;">Tried: ' + url + '</div>';
+    });
 }
 
 function buildCategoryGrid() {
