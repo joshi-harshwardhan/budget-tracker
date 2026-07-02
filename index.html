@@ -356,20 +356,22 @@ function submitTransaction() {
   const btn = document.getElementById("submit-btn");
   btn.disabled = true; btn.textContent = "Logging...";
 
-  fetch(config.url, {
-    method: "POST",
-    mode: "no-cors",
-    body: JSON.stringify({
-      token: config.token, action: "addTransaction",
-      lineItemKey: selectedItem.key, amount: amount, note: note, month: selectedMonth
+  const params = new URLSearchParams({
+    action: "addTransaction", token: config.token,
+    lineItemKey: selectedItem.key, amount: amount, note: note, month: selectedMonth
+  });
+
+  jsonp(config.url + "?" + params.toString())
+    .then(data => {
+      if (data.status === "ok") {
+        showToast("Logged ₹" + amount.toLocaleString("en-IN") + " to " + selectedItem.label);
+        showScreen("category-screen");
+      } else {
+        alert("Error: " + data.message);
+      }
     })
-  })
-  .then(() => {
-    showToast("Logged ₹" + amount.toLocaleString("en-IN") + " to " + selectedItem.label);
-    showScreen("category-screen");
-  })
-  .catch(err => alert("Network error: " + err.message))
-  .finally(() => { btn.disabled = false; btn.textContent = "Log expense"; });
+    .catch(() => alert("Network error, the transaction was not logged. Try again."))
+    .finally(() => { btn.disabled = false; btn.textContent = "Log expense"; });
 }
 
 function createCategory() {
@@ -399,17 +401,22 @@ function submitNewItem(skip) {
   const category = pendingNewCategory || selectedCategory;
   const budget = skip ? 0 : (parseFloat(newItemBudgetStr) || 0);
 
-  fetch(config.url, {
-    method: "POST",
-    mode: "no-cors",
-    body: JSON.stringify({ token: config.token, action: "addItem", category: category, label: label, budget: budget })
-  })
-  .then(() => {
-    showToast(label + " added to " + category);
-    pendingNewCategory = null;
-    setTimeout(() => { loadCategories(); showScreen("category-screen"); }, 600);
-  })
-  .catch(err => alert("Network error: " + err.message));
+  const params = new URLSearchParams({
+    action: "addItem", token: config.token, category: category, label: label, budget: budget
+  });
+
+  jsonp(config.url + "?" + params.toString())
+    .then(data => {
+      if (data.status === "ok") {
+        showToast(label + " added to " + category);
+        pendingNewCategory = null;
+        loadCategories();
+        showScreen("category-screen");
+      } else {
+        alert("Error: " + data.message);
+      }
+    })
+    .catch(() => alert("Network error, the item was not added. Try again."));
 }
 
 // Override pressKey target for the new-item budget keypad specifically
