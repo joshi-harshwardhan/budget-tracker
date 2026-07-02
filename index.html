@@ -211,10 +211,24 @@ function openLink(which) {
   if (url) window.open(url, "_blank");
 }
 
+function jsonp(url) {
+  return new Promise((resolve, reject) => {
+    const cbName = "jsonp_cb_" + Math.random().toString(36).slice(2);
+    const script = document.createElement("script");
+    window[cbName] = function (data) {
+      resolve(data);
+      delete window[cbName];
+      script.remove();
+    };
+    script.onerror = () => { reject(new Error("load failed")); delete window[cbName]; script.remove(); };
+    script.src = url + (url.indexOf("?") > -1 ? "&" : "?") + "callback=" + cbName;
+    document.body.appendChild(script);
+  });
+}
+
 function loadCategories() {
   const config = getConfig();
-  fetch(config.url + "?action=categories")
-    .then(r => r.json())
+  jsonp(config.url + "?action=categories")
     .then(data => {
       categories = {};
       (data.items || []).forEach(item => {
@@ -313,17 +327,15 @@ function submitTransaction() {
 
   fetch(config.url, {
     method: "POST",
+    mode: "no-cors",
     body: JSON.stringify({
       token: config.token, action: "addTransaction",
       lineItemKey: selectedItem.key, amount: amount, note: note, month: selectedMonth
     })
   })
-  .then(r => r.json())
-  .then(data => {
-    if (data.status === "ok") {
-      showToast("Logged ₹" + amount.toLocaleString("en-IN") + " to " + selectedItem.label);
-      showScreen("category-screen");
-    } else alert("Error: " + data.message);
+  .then(() => {
+    showToast("Logged ₹" + amount.toLocaleString("en-IN") + " to " + selectedItem.label);
+    showScreen("category-screen");
   })
   .catch(err => alert("Network error: " + err.message))
   .finally(() => { btn.disabled = false; btn.textContent = "Log expense"; });
@@ -358,16 +370,13 @@ function submitNewItem(skip) {
 
   fetch(config.url, {
     method: "POST",
+    mode: "no-cors",
     body: JSON.stringify({ token: config.token, action: "addItem", category: category, label: label, budget: budget })
   })
-  .then(r => r.json())
-  .then(data => {
-    if (data.status === "ok") {
-      showToast(label + " added to " + category);
-      pendingNewCategory = null;
-      loadCategories();
-      showScreen("category-screen");
-    } else alert("Error: " + data.message);
+  .then(() => {
+    showToast(label + " added to " + category);
+    pendingNewCategory = null;
+    setTimeout(() => { loadCategories(); showScreen("category-screen"); }, 600);
   })
   .catch(err => alert("Network error: " + err.message));
 }

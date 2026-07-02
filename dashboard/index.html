@@ -92,10 +92,24 @@ function setView(view) {
   load();
 }
 
+function jsonp(url) {
+  return new Promise((resolve, reject) => {
+    const cbName = "jsonp_cb_" + Math.random().toString(36).slice(2);
+    const script = document.createElement("script");
+    window[cbName] = function (data) {
+      resolve(data);
+      delete window[cbName];
+      script.remove();
+    };
+    script.onerror = () => { reject(new Error("Could not reach the Web App URL.")); delete window[cbName]; script.remove(); };
+    script.src = url + (url.indexOf("?") > -1 ? "&" : "?") + "callback=" + cbName;
+    document.body.appendChild(script);
+  });
+}
+
 function load() {
   document.getElementById("content").innerHTML = '<div class="loading">Loading your budget...</div>';
-  fetch(WEB_APP_URL + "?view=" + currentView)
-    .then(r => r.json())
+  jsonp(WEB_APP_URL + "?view=" + currentView)
     .then(render)
     .catch(() => {
       document.getElementById("content").innerHTML = '<div class="loading">Could not load data. Check the Web App URL is set correctly.</div>';
