@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="theme-color" content="#0a0a0a">
-<title>Log Expense</title>
+<title>BrokeNoMore</title>
 <link rel="manifest" href="manifest.json">
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -252,7 +252,8 @@ function jsonp(url, timeoutMs) {
 function loadCategories() {
   const config = getConfig();
   const url = config.url + "?action=categories";
-  jsonp(url)
+  document.getElementById("cat-grid").innerHTML = '<div style="grid-column:1/-1;text-align:center;color:#6a6a6a;font-size:13px;padding:20px 0;">Loading...</div>';
+  jsonp(url, 20000)
     .then(data => {
       categories = {};
       (data.items || []).forEach(item => {
@@ -266,9 +267,24 @@ function loadCategories() {
       const attempted = (err && err.fullUrl) ? err.fullUrl : url;
       document.getElementById("cat-grid").innerHTML =
         '<div style="grid-column:1/-1;font-size:11px;color:#ef4444;word-break:break-all;padding:10px;">' +
-        (err && err.message === "timeout" ? "Timed out after 8s. " : "Failed to load script. ") +
-        'Tap to test directly: <a href="' + attempted + '" target="_blank" style="color:#60a5fa;">' + attempted + '</a></div>';
+        (err && err.message === "timeout" ? "Timed out after 20s. " : "Failed to load script. ") +
+        'Tap to test directly: <a href="' + attempted + '" target="_blank" style="color:#60a5fa;">' + attempted + '</a>' +
+        '<div style="margin-top:10px;"><span style="color:#4ade80;cursor:pointer;font-weight:700;" onclick="loadCategories()">Retry</span></div></div>';
     });
+}
+
+function attachLongPress(el, callback, duration) {
+  let timer = null;
+  let fired = false;
+  const start = () => { fired = false; timer = setTimeout(() => { fired = true; callback(); }, duration || 550); };
+  const cancel = () => { if (timer) clearTimeout(timer); };
+  el.addEventListener("touchstart", start, { passive: true });
+  el.addEventListener("touchend", cancel);
+  el.addEventListener("touchmove", cancel);
+  el.addEventListener("mousedown", start);
+  el.addEventListener("mouseup", cancel);
+  el.addEventListener("mouseleave", cancel);
+  return () => fired;
 }
 
 function buildCategoryGrid() {
@@ -278,7 +294,8 @@ function buildCategoryGrid() {
     const btn = document.createElement("div");
     btn.className = "cat-btn";
     btn.textContent = cat;
-    btn.onclick = () => openCategory(cat);
+    const wasLongPress = attachLongPress(btn, () => confirmDeleteCategory(cat));
+    btn.onclick = () => { if (!wasLongPress()) openCategory(cat); };
     grid.appendChild(btn);
   });
   const addBtn = document.createElement("div");
@@ -290,6 +307,18 @@ function buildCategoryGrid() {
   document.getElementById("month-label").textContent = MONTH_LABELS[selectedMonth];
 }
 
+function confirmDeleteCategory(cat) {
+  if (!confirm('Delete "' + cat + '" and all its items?\n\nTransactions already logged under it stay in your monthly tabs, this only removes it from the budget going forward.')) return;
+  const config = getConfig();
+  const params = new URLSearchParams({ action: "deleteCategory", token: config.token, category: cat });
+  jsonp(config.url + "?" + params.toString(), 20000)
+    .then(data => {
+      if (data.status === "ok") { showToast('Deleted "' + cat + '"'); loadCategories(); }
+      else alert("Error: " + data.message);
+    })
+    .catch(() => alert("Network error, category was not deleted. Try again."));
+}
+
 function openCategory(cat) {
   selectedCategory = cat;
   document.getElementById("item-screen-title").textContent = cat;
@@ -299,7 +328,8 @@ function openCategory(cat) {
     const btn = document.createElement("div");
     btn.className = "item-btn";
     btn.textContent = item.label;
-    btn.onclick = () => openAmount(item);
+    const wasLongPress = attachLongPress(btn, () => confirmDeleteItem(item));
+    btn.onclick = () => { if (!wasLongPress()) openAmount(item); };
     list.appendChild(btn);
   });
   const addBtn = document.createElement("div");
@@ -315,6 +345,24 @@ function openCategory(cat) {
   };
   list.appendChild(addBtn);
   showScreen("item-screen");
+}
+
+function confirmDeleteItem(item) {
+  if (!confirm('Delete "' + item.label + '"?\n\nTransactions already logged under it stay in your monthly tabs, this only removes it from the budget going forward.')) return;
+  const config = getConfig();
+  const params = new URLSearchParams({ action: "deleteItem", token: config.token, key: item.key });
+  jsonp(config.url + "?" + params.toString(), 20000)
+    .then(data => {
+      if (data.status === "ok") {
+        showToast('Deleted "' + item.label + '"');
+        loadCategories();
+        setTimeout(() => {
+          if (categories[selectedCategory]) openCategory(selectedCategory);
+          else showScreen("category-screen");
+        }, 300);
+      } else alert("Error: " + data.message);
+    })
+    .catch(() => alert("Network error, item was not deleted. Try again."));
 }
 
 function openAmount(item) {
@@ -361,7 +409,7 @@ function submitTransaction() {
     lineItemKey: selectedItem.key, amount: amount, note: note, month: selectedMonth
   });
 
-  jsonp(config.url + "?" + params.toString())
+  jsonp(config.url + "?" + params.toString(), 20000)
     .then(data => {
       if (data.status === "ok") {
         showToast("Logged ₹" + amount.toLocaleString("en-IN") + " to " + selectedItem.label);
@@ -405,7 +453,7 @@ function submitNewItem(skip) {
     action: "addItem", token: config.token, category: category, label: label, budget: budget
   });
 
-  jsonp(config.url + "?" + params.toString())
+  jsonp(config.url + "?" + params.toString(), 20000)
     .then(data => {
       if (data.status === "ok") {
         showToast(label + " added to " + category);

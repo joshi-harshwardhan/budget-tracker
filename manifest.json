@@ -1,6 +1,6 @@
 {
-  "name": "Log Expense",
-  "short_name": "Log Expense",
+  "name": "BrokeNoMore",
+  "short_name": "BrokeNoMore",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0a0a0a",
